@@ -1,4 +1,4 @@
-import AuthForm from "./auth-form";
+import AuthForm from "@/components/auth-form";
 
 // Route: app/(auth)/kirish/page.jsx
 export default function KirishPage() {
