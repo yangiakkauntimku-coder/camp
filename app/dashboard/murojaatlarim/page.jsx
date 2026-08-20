@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { ArrowLeft, Plus, X, MessageSquare, Lightbulb, Bug, HelpCircle, Handshake } from "lucide-react";
 
