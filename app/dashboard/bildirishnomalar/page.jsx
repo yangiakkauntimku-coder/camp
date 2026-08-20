@@ -1,3 +1,5 @@
+"use client";
+
 import { useState, useMemo } from "react";
 import { ArrowLeft, Bell, Clock, Sparkles, Info, CheckCheck } from "lucide-react";
 
