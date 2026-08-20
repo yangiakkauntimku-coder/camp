@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Mail, Lock, User, Eye, EyeOff, ArrowRight } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Mail, Lock, User, Eye, EyeOff, ArrowRight, AlertCircle, CheckCircle2 } from "lucide-react";
+import { createClient } from "@/lib/supabase/client";
 
 /* ------------------------------------------------------------------ */
 /*  Umumiy forma — /kirish va /royxatdan-otish sahifalari shu bir      */
@@ -105,21 +107,93 @@ function AuthScene() {
 
 // mode: "login" | "signup"
 export default function AuthForm({ mode }) {
+  const router = useRouter();
+  const supabase = createClient();
+
   const [showPass, setShowPass] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "", confirm: "" });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [signupDone, setSignupDone] = useState(false);
   const isLogin = mode === "login";
 
   function update(key, value) {
     setForm((f) => ({ ...f, [key]: value }));
   }
 
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setError(null);
+
+    if (!form.email || !form.password) {
+      setError("Email va parolni to'ldiring.");
+      return;
+    }
+
+    if (isLogin) {
+      setLoading(true);
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: form.email,
+        password: form.password,
+      });
+      setLoading(false);
+      if (signInError) {
+        setError(
+          signInError.message === "Invalid login credentials"
+            ? "Email yoki parol noto'g'ri."
+            : signInError.message
+        );
+        return;
+      }
+      router.push("/dashboard");
+      router.refresh();
+    } else {
+      if (!form.name.trim()) {
+        setError("Ismingizni kiriting.");
+        return;
+      }
+      if (form.password !== form.confirm) {
+        setError("Parollar bir xil emas.");
+        return;
+      }
+      if (form.password.length < 6) {
+        setError("Parol kamida 6 belgidan iborat bo'lishi kerak.");
+        return;
+      }
+
+      setLoading(true);
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email: form.email,
+        password: form.password,
+        options: { data: { full_name: form.name.trim() } },
+      });
+      setLoading(false);
+      if (signUpError) {
+        setError(
+          signUpError.message === "User already registered"
+            ? "Bu email bilan hisob allaqachon mavjud."
+            : signUpError.message
+        );
+        return;
+      }
+
+      if (data.session) {
+        // Email tasdiqlash o'chirilgan loyihalarda sessiya darhol beriladi
+        router.push("/dashboard");
+        router.refresh();
+      } else {
+        // Standart holat: emailga tasdiqlash havolasi yuborildi
+        setSignupDone(true);
+      }
+    }
+  }
+
   return (
     <div className="camp-root min-h-screen w-full">
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,600;9..144,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap');
         .camp-root { background: #EEF3EE; color: #1B2420; font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif; }
         .camp-display { font-family: 'Fraunces', Georgia, serif; }
-        .text-cream { color: #FBF6EA; } .text-muted { color: #5B6D64; } .text-teal { color: #2F6D5F; }
+        .text-cream { color: #FBF6EA; } .text-muted { color: #5B6D64; } .text-teal { color: #2F6D5F; } .text-terracotta { color: #B85D34; }
         .bg-teal { background: #2F6D5F; } .border-hair { border-color: #DCE6DF; }
         .star { animation: campTwinkle 3.6s ease-in-out infinite; }
         @keyframes campTwinkle { 0%,100% { opacity: 0.15; } 50% { opacity: 1; } }
@@ -158,40 +232,61 @@ export default function AuthForm({ mode }) {
               {isLogin ? "Hisobingizga kiring va imkoniyatlaringizni davom ettiring." : "Bir necha soniyada ro'yxatdan o'ting."}
             </p>
 
-            <form onSubmit={(e) => e.preventDefault()} className="space-y-3.5">
-              {!isLogin && (
-                <div className="field rounded-xl flex items-center gap-2.5 px-3.5 py-3">
-                  <User size={16} className="text-muted shrink-0" />
-                  <input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="To'liq ismingiz" className="flex-1 min-w-0 text-sm outline-none bg-transparent" />
+            {signupDone ? (
+              <div className="field rounded-xl p-4 flex items-start gap-3" style={{ borderColor: "#2F6D5F" }}>
+                <CheckCircle2 size={18} className="text-teal shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium">Deyarli tayyor!</p>
+                  <p className="text-xs text-muted mt-1">
+                    <span className="font-medium">{form.email}</span> manzilingizga tasdiqlash havolasi yuborildi. Emailingizni tekshiring va havolani bosing.
+                  </p>
                 </div>
-              )}
-              <div className="field rounded-xl flex items-center gap-2.5 px-3.5 py-3">
-                <Mail size={16} className="text-muted shrink-0" />
-                <input value={form.email} onChange={(e) => update("email", e.target.value)} type="email" placeholder="Email manzilingiz" className="flex-1 min-w-0 text-sm outline-none bg-transparent" />
               </div>
-              <div className="field rounded-xl flex items-center gap-2.5 px-3.5 py-3">
-                <Lock size={16} className="text-muted shrink-0" />
-                <input value={form.password} onChange={(e) => update("password", e.target.value)} type={showPass ? "text" : "password"} placeholder="Parol" className="flex-1 min-w-0 text-sm outline-none bg-transparent" />
-                <button type="button" onClick={() => setShowPass((v) => !v)} className="text-muted shrink-0">{showPass ? <EyeOff size={15} /> : <Eye size={15} />}</button>
-              </div>
-              {!isLogin && (
-                <div className="field rounded-xl flex items-center gap-2.5 px-3.5 py-3">
-                  <Lock size={16} className="text-muted shrink-0" />
-                  <input value={form.confirm} onChange={(e) => update("confirm", e.target.value)} type={showPass ? "text" : "password"} placeholder="Parolni tasdiqlang" className="flex-1 min-w-0 text-sm outline-none bg-transparent" />
-                </div>
-              )}
+            ) : (
+              <>
+                {error && (
+                  <div className="rounded-xl p-3 mb-3.5 flex items-start gap-2" style={{ background: "rgba(184,93,52,0.08)" }}>
+                    <AlertCircle size={15} className="text-terracotta shrink-0 mt-0.5" />
+                    <p className="text-xs text-terracotta">{error}</p>
+                  </div>
+                )}
 
-              {isLogin && (
-                <div className="flex justify-end">
-                  <button type="button" className="text-xs text-teal font-medium">Parolni unutdingizmi?</button>
-                </div>
-              )}
+                <form onSubmit={handleSubmit} className="space-y-3.5">
+                  {!isLogin && (
+                    <div className="field rounded-xl flex items-center gap-2.5 px-3.5 py-3">
+                      <User size={16} className="text-muted shrink-0" />
+                      <input value={form.name} onChange={(e) => update("name", e.target.value)} placeholder="To'liq ismingiz" className="flex-1 min-w-0 text-sm outline-none bg-transparent" />
+                    </div>
+                  )}
+                  <div className="field rounded-xl flex items-center gap-2.5 px-3.5 py-3">
+                    <Mail size={16} className="text-muted shrink-0" />
+                    <input value={form.email} onChange={(e) => update("email", e.target.value)} type="email" placeholder="Email manzilingiz" className="flex-1 min-w-0 text-sm outline-none bg-transparent" />
+                  </div>
+                  <div className="field rounded-xl flex items-center gap-2.5 px-3.5 py-3">
+                    <Lock size={16} className="text-muted shrink-0" />
+                    <input value={form.password} onChange={(e) => update("password", e.target.value)} type={showPass ? "text" : "password"} placeholder="Parol" className="flex-1 min-w-0 text-sm outline-none bg-transparent" />
+                    <button type="button" onClick={() => setShowPass((v) => !v)} className="text-muted shrink-0">{showPass ? <EyeOff size={15} /> : <Eye size={15} />}</button>
+                  </div>
+                  {!isLogin && (
+                    <div className="field rounded-xl flex items-center gap-2.5 px-3.5 py-3">
+                      <Lock size={16} className="text-muted shrink-0" />
+                      <input value={form.confirm} onChange={(e) => update("confirm", e.target.value)} type={showPass ? "text" : "password"} placeholder="Parolni tasdiqlang" className="flex-1 min-w-0 text-sm outline-none bg-transparent" />
+                    </div>
+                  )}
 
-              <button type="submit" className="submit-btn w-full bg-teal text-white rounded-full py-3.5 text-sm font-medium flex items-center justify-center gap-2 mt-2">
-                {isLogin ? "Kirish" : "Ro'yxatdan o'tish"}
-                <ArrowRight size={15} />
-              </button>
-            </form>
+                  {isLogin && (
+                    <div className="flex justify-end">
+                      <button type="button" className="text-xs text-teal font-medium">Parolni unutdingizmi?</button>
+                    </div>
+                  )}
+
+                  <button type="submit" disabled={loading} className="submit-btn w-full bg-teal text-white rounded-full py-3.5 text-sm font-medium flex items-center justify-center gap-2 mt-2 disabled:opacity-60">
+                    {loading ? "Iltimos kuting..." : isLogin ? "Kirish" : "Ro'yxatdan o'tish"}
+                    {!loading && <ArrowRight size={15} />}
+                  </button>
+                </form>
+              </>
+            )}
 
             <p className="text-xs text-muted text-center mt-6">
               {isLogin ? (
